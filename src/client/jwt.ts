@@ -135,7 +135,7 @@ async function _isLoggedIn(): Promise<IsLoggedInResponse> {
     // });
 
     // Decode the JWT
-    let payload = decodeJwt(token);
+    const payload = decodeJwt(token);
     const { iss, aud, exp, iat } = payload;
 
     if (iss !== getApiBase()) {
@@ -179,8 +179,8 @@ async function _isLoggedIn(): Promise<IsLoggedInResponse> {
         console.log("Refreshed access token successfully.");
         const newToken = getToken();
         if (newToken) {
-          payload = decodeJwt(newToken);
-          const result = TokenPayloadSchema.safeParse(payload);
+          const newPayload = decodeJwt(newToken);
+          const result = TokenPayloadSchema.safeParse(newPayload);
           if (result.success) {
             __isLoggedIn = { token: newToken, claims: result.data };
             return __isLoggedIn;
