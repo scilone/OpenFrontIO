@@ -427,7 +427,11 @@ class Client {
       this.gameStop();
     }
     const config = await getServerConfigFromClient();
-    const token = await getPlayToken();
+    const isUserLoggedIn = await isLoggedIn();
+    const token =
+      isUserLoggedIn !== false
+        ? isUserLoggedIn.token
+        : getPersistentIDFromCookie();
 
     this.gameStop = joinLobby(
       {

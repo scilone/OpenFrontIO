@@ -184,7 +184,15 @@ async function _isLoggedIn(): Promise<IsLoggedInResponse> {
           if (result.success) {
             __isLoggedIn = { token: newToken, claims: result.data };
             return __isLoggedIn;
+          } else {
+            console.error("Invalid refreshed token payload");
+            __isLoggedIn = false;
+            return false;
           }
+        } else {
+          console.error("No token found after refresh");
+          __isLoggedIn = false;
+          return false;
         }
       } else {
         console.error("Failed to refresh access token.");
