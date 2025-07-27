@@ -106,14 +106,30 @@ let __isLoggedIn: IsLoggedInResponse | undefined = undefined;
 let __refreshPromise: Promise<boolean> | null = null;
 let __refreshInProgress = false;
 
+function validateTokenPayload(
+  payload: any,
+): { token: string; claims: TokenPayload } | false {
+  const result = TokenPayloadSchema.safeParse(payload);
+  if (!result.success) {
+    const error = z.prettifyError(result.error);
+    console.error("Invalid payload", error);
+    return false;
+  }
+
+  const token = getToken();
+  if (!token) {
+    return false;
+  }
+
+  return { token, claims: result.data };
+}
+
 export async function isLoggedIn(): Promise<IsLoggedInResponse> {
   if (__refreshPromise) {
     await __refreshPromise;
   }
 
-  if (__isLoggedIn === undefined || __refreshInProgress) {
-    __isLoggedIn = await _isLoggedIn();
-  }
+  __isLoggedIn ??= await _isLoggedIn();
 
   return __isLoggedIn;
 }
@@ -180,9 +196,9 @@ async function _isLoggedIn(): Promise<IsLoggedInResponse> {
         const newToken = getToken();
         if (newToken) {
           const newPayload = decodeJwt(newToken);
-          const result = TokenPayloadSchema.safeParse(newPayload);
-          if (result.success) {
-            __isLoggedIn = { token: newToken, claims: result.data };
+          const validationResult = validateTokenPayload(newPayload);
+          if (validationResult !== false) {
+            __isLoggedIn = validationResult;
             return __isLoggedIn;
           } else {
             console.error("Invalid refreshed token payload");
@@ -201,16 +217,7 @@ async function _isLoggedIn(): Promise<IsLoggedInResponse> {
       }
     }
 
-    const result = TokenPayloadSchema.safeParse(payload);
-    if (!result.success) {
-      const error = z.prettifyError(result.error);
-      // Invalid response
-      console.error("Invalid payload", error);
-      return false;
-    }
-
-    const claims = result.data;
-    return { token, claims };
+    return validateTokenPayload(payload);
   } catch (e) {
     console.log(e);
     return false;
