@@ -103,12 +103,37 @@ export type IsLoggedInResponse =
   | { token: string; claims: TokenPayload }
   | false;
 let __isLoggedIn: IsLoggedInResponse | undefined = undefined;
-export function isLoggedIn(): IsLoggedInResponse {
-  __isLoggedIn ??= _isLoggedIn();
+let __refreshPromise: Promise<boolean> | null = null;
+let __refreshInProgress = false;
+
+function validateTokenPayload(
+  payload: any,
+): { token: string; claims: TokenPayload } | false {
+  const result = TokenPayloadSchema.safeParse(payload);
+  if (!result.success) {
+    const error = z.prettifyError(result.error);
+    console.error("Invalid payload", error);
+    return false;
+  }
+
+  const token = getToken();
+  if (!token) {
+    return false;
+  }
+
+  return { token, claims: result.data };
+}
+
+export async function isLoggedIn(): Promise<IsLoggedInResponse> {
+  if (__refreshPromise) {
+    await __refreshPromise;
+  }
+
+  __isLoggedIn ??= await _isLoggedIn();
 
   return __isLoggedIn;
 }
-function _isLoggedIn(): IsLoggedInResponse {
+async function _isLoggedIn(): Promise<IsLoggedInResponse> {
   try {
     const token = getToken();
     if (!token) {
@@ -160,26 +185,39 @@ function _isLoggedIn(): IsLoggedInResponse {
     const refreshAge: number = 3 * 24 * 3600; // 3 days
     if (iat !== undefined && now >= iat + refreshAge) {
       console.log("Refreshing access token...");
-      postRefresh().then((success) => {
-        if (success) {
-          console.log("Refreshed access token successfully.");
+      __refreshInProgress = true;
+      __refreshPromise = postRefresh();
+      const success = await __refreshPromise;
+      __refreshPromise = null;
+      __refreshInProgress = false;
+
+      if (success) {
+        console.log("Refreshed access token successfully.");
+        const newToken = getToken();
+        if (newToken) {
+          const newPayload = decodeJwt(newToken);
+          const validationResult = validateTokenPayload(newPayload);
+          if (validationResult !== false) {
+            __isLoggedIn = validationResult;
+            return __isLoggedIn;
+          } else {
+            console.error("Invalid refreshed token payload");
+            __isLoggedIn = false;
+            return false;
+          }
         } else {
-          console.error("Failed to refresh access token.");
-          // TODO: Update the UI to show logged out state
+          console.error("No token found after refresh");
+          __isLoggedIn = false;
+          return false;
         }
-      });
+      } else {
+        console.error("Failed to refresh access token.");
+        __isLoggedIn = false;
+        return false;
+      }
     }
 
-    const result = TokenPayloadSchema.safeParse(payload);
-    if (!result.success) {
-      const error = z.prettifyError(result.error);
-      // Invalid response
-      console.error("Invalid payload", error);
-      return false;
-    }
-
-    const claims = result.data;
-    return { token, claims };
+    return validateTokenPayload(payload);
   } catch (e) {
     console.log(e);
     return false;
