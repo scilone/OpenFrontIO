@@ -18,7 +18,7 @@ function getAudience() {
 export function getApiBase() {
   const domainname = getAudience();
   return domainname === "localhost"
-    ? (localStorage.getItem("apiHost") ?? "http://localhost:8787")
+    ? (localStorage.getItem("apiHost") ?? "http://localhost:3000")
     : `https://api.${domainname}`;
 }
 
@@ -104,14 +104,17 @@ export type IsLoggedInResponse =
   | false;
 let __isLoggedIn: IsLoggedInResponse | undefined = undefined;
 let __refreshPromise: Promise<boolean> | null = null;
+let __refreshInProgress = false;
+
 export async function isLoggedIn(): Promise<IsLoggedInResponse> {
   if (__refreshPromise) {
     await __refreshPromise;
-    __refreshPromise = null;
-    __isLoggedIn = undefined;
   }
 
-  __isLoggedIn ??= await _isLoggedIn();
+  if (__isLoggedIn === undefined || __refreshInProgress) {
+    __isLoggedIn = await _isLoggedIn();
+  }
+
   return __isLoggedIn;
 }
 async function _isLoggedIn(): Promise<IsLoggedInResponse> {
@@ -166,18 +169,27 @@ async function _isLoggedIn(): Promise<IsLoggedInResponse> {
     const refreshAge: number = 3 * 24 * 3600; // 3 days
     if (iat !== undefined && now >= iat + refreshAge) {
       console.log("Refreshing access token...");
+      __refreshInProgress = true;
       __refreshPromise = postRefresh();
       const success = await __refreshPromise;
       __refreshPromise = null;
+      __refreshInProgress = false;
 
       if (success) {
         console.log("Refreshed access token successfully.");
         const newToken = getToken();
         if (newToken) {
           payload = decodeJwt(newToken);
+          const result = TokenPayloadSchema.safeParse(payload);
+          if (result.success) {
+            __isLoggedIn = { token: newToken, claims: result.data };
+            return __isLoggedIn;
+          }
         }
       } else {
         console.error("Failed to refresh access token.");
+        __isLoggedIn = false;
+        return false;
       }
     }
 

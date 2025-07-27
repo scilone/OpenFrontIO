@@ -304,25 +304,28 @@ class Client {
     };
 
     const checkAuthAndUser = async () => {
-      const loginResult = await isLoggedIn();
-      if (loginResult === false) {
-        // Not logged in
-        onUserMe(false);
-      } else {
-        // JWT appears to be valid
-        loginDiscordButton.disable = true;
-        loginDiscordButton.translationKey = "main.checking_login";
-        logoutDiscordButton.hidden = false;
-        logoutDiscordButton.addEventListener("click", () => {
-          // Log out
-          logOut();
+      try {
+        const loginResult = await isLoggedIn();
+        if (loginResult === false) {
           onUserMe(false);
-        });
+        } else {
+          loginDiscordButton.disable = true;
+          loginDiscordButton.translationKey = "main.checking_login";
+          logoutDiscordButton.hidden = false;
+          logoutDiscordButton.addEventListener("click", () => {
+            // Log out
+            logOut();
+            onUserMe(false);
+          });
 
-        // Look up the discord user object.
-        // TODO: Add caching
-        const userMeResponse = await getUserMe();
-        onUserMe(userMeResponse);
+          // Look up the discord user object.
+          // TODO: Add caching
+          const userMeResponse = await getUserMe();
+          onUserMe(userMeResponse);
+        }
+      } catch (error) {
+        console.error("Error during authentication check:", error);
+        onUserMe(false);
       }
     };
 
